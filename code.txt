@@ -1,0 +1,297 @@
+#include "DHT.h" 
+
+#define DHTTYPE DHT11   // DHT 11
+#define dht_dpin 2
+DHT dht(dht_dpin, DHTTYPE);
+
+#include <SoftwareSerial.h>
+SoftwareSerial gsm(10, 11); // RX, TX
+
+void SendSMS();
+void send_message(String message);
+ 
+#include<LiquidCrystal.h>
+LiquidCrystal lcd(3,4,5,6,7,8);
+
+unsigned long startMillis;
+unsigned long currentMillis;
+const unsigned long period = 30000;
+
+const int moisturePin = A0;  // moisteure sensor pin
+const int LdrPin = A1; 
+const int IrPin = 9; 
+#define motor 12 
+#define buzzer 13 
+
+float moisturePercentage,Ldrvalue;              //moisture reading
+int temperature, humidity, soiltemp;
+
+int flag1,flag2;
+
+void buz()
+{
+  for(int k =0;k<2;k++)
+  {
+  digitalWrite(buzzer, HIGH);
+  delay(1000);
+  digitalWrite(buzzer, LOW);
+  delay(200);
+  }
+ }
+
+ 
+void setup()
+{
+  pinMode(moisturePin,INPUT);
+  pinMode(LdrPin, INPUT);  
+  pinMode(IrPin, INPUT);     
+  pinMode(motor, OUTPUT);    
+  pinMode(buzzer, OUTPUT); 
+  
+  digitalWrite(buzzer, LOW);
+  digitalWrite(motor, LOW);
+  
+ lcd.begin(16, 2);
+ lcd.clear();
+ lcd.print("IOT BASED FIELD "); //18.IOT Based Field Montoring and Control using GPRS
+ lcd.setCursor(0,1);
+ lcd.print("MNT & CONTOLLING");  //  SYSTEM  ");
+ delay(5000);
+
+  dht.begin();
+ 
+  //Serial.begin(9600);
+  gsm.begin(9600);
+  delay(1000);
+  Serial.println("MSG SEnding....");
+  SendSMS();
+  delay(1000);
+  Serial.println("GPRS Connect....");  
+  modem_init();
+  data_init();
+  internet_init();
+  delay(1000);
+}
+
+
+void loop()
+{
+ksn:
+
+  temperature = dht.readTemperature();  
+  humidity = dht.readHumidity();
+  
+  moisturePercentage = ( 100.00 - ( (analogRead(moisturePin) / 1023.00) * 100.00 ) ); 
+  Ldrvalue=((analogRead(LdrPin) / 1024.00) * 100);  //analogRead(moisturePin) / 1023.00) * 100.00
+   
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("T:");  lcd.print(temperature);
+  lcd.setCursor(8,0);
+  lcd.print("H:");  lcd.print(humidity); 
+  lcd.setCursor(0,1);
+  lcd.print("S:");  lcd.print(moisturePercentage);
+  lcd.setCursor(8,1);
+  lcd.print("L:");  lcd.print(Ldrvalue);
+  delay(800);
+
+  if (digitalRead(IrPin) == 0)            
+  {
+    buz();
+    lcd.clear();
+    lcd.print("INTRUDER DETCTED");
+    lcd.setCursor(0,1);
+    lcd.print("BUZZER ON");
+    delay(3000);
+    send_message("INTRUDER DETECTED SO Plz Be ALert...");  
+    delay(500);
+  } 
+  
+  else if(moisturePercentage<10)
+  {
+    flag1++;
+    flag2=0;
+    if(flag1==1)
+    {
+    send_message("LAND IS DRY SO MOTOR IS ON"); 
+    digitalWrite(motor, HIGH);
+    lcd.clear();
+    lcd.print("LAND IS DRY");
+    lcd.setCursor(0,1);
+    lcd.print("SO MOTOR ON");
+    delay(1000);
+    }
+    digitalWrite(motor, HIGH);
+    lcd.clear();
+    lcd.print("LAND IS DRY");
+    lcd.setCursor(0,1);
+    lcd.print("SO MOTOR ON");
+    delay(1000);
+    }
+
+  else if(moisturePercentage>10)
+  {
+    flag2++;
+    flag1=0;
+    if(flag2==1)
+    {
+    send_message("LAND IS WET SO MOTOR IS OFF"); 
+    digitalWrite(motor, LOW);
+    lcd.clear();
+    lcd.print("LAND IS WET");
+    lcd.setCursor(0,1);
+    lcd.print("SO MOTOR OFF");
+    delay(1000);
+    }
+    digitalWrite(motor, LOW);
+    lcd.clear();
+    lcd.print("LAND IS WET");
+    lcd.setCursor(0,1);
+    lcd.print("SO MOTOR OFF");
+    delay(1000);
+    }
+
+  currentMillis = millis();
+  
+  if (currentMillis - startMillis >= period)
+  {
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("UPDATING DATA....");
+    startMillis = currentMillis;
+    Send_data();
+  } 
+  
+} 
+// LOOP ENDDDDD........
+
+
+
+
+void modem_init()
+{
+  Serial.println("Please wait.....");
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("GSM Init....");
+
+  gsm.println("AT");
+  delay(2000); 
+  gsm.println("AT+CMGF=1");
+  delay(1000);
+  gsm.println("AT+CNMI=2,2,0,0,0");
+  delay(1000);
+}
+
+void data_init()
+{
+  Serial.println("Please wait.....");
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("INITLIZTING GPRS...");
+  
+  gsm.print("AT\r\n");
+  delay(1000);
+  gsm.print("AT+SAPBR=3,1,\"Contype\",\"GPRS\"\r\n");
+  delay(1000);
+  gsm.print("AT+SAPBR=3,1,\"APN\",\"www\"\r\n");
+  delay(1000);
+  gsm.print("AT+SAPBR=1,1\r\n");
+  delay(4000);
+}
+
+void internet_init()
+{
+  Serial.println("Please wait.....");
+
+  gsm.print("AT+HTTPINIT\r\n");
+  delay(1000);
+  gsm.print(" AT+HTTPPARA=\"CID\",1\r\n");
+  delay(2000);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(" NET CONNECTED  ");
+  delay(1000);
+  
+}
+
+
+void Send_data()
+{
+    lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("UPLOADING ...."); //GET https://api.thingspeak.com/update?api_key=XZAOR0ERD90EJJ3Z&field1=0
+  delay(1000);
+  gsm.print("AT+HTTPPARA=\"URL\",");
+  gsm.print("\"http://api.thingspeak.com/update?api_key=HR7DAGX7M6TNR2ST&field1=");
+  gsm.print(temperature);
+  gsm.print("&field2=");
+  gsm.print(humidity); 
+  gsm.print("&field3=");
+  gsm.print(moisturePercentage);
+  gsm.print("&field4=");
+  gsm.print(Ldrvalue);
+  gsm.print("\" \r\n");
+  delay(1000);
+  gsm.print("AT+HTTPACTION=0\r\n"); 
+  delay(1000);
+  gsm.print("AT+HTTPREAD\r\n");
+  delay(1000);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("DATA UPLOADED   ");
+  delay(1000);
+ }
+
+
+void SendSMS()
+{
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("MODEM INIT....");
+    
+  gsm.println("AT");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CMGF=1");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CNMI=2,2,0,0,0");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CMGS=\"9618528828\"\r"); //Change to destination phone number 9494252144
+  delay(1000);
+  gsm.println("GSM Modem! INIT...");//the content of the message
+  delay(200);
+  gsm.println((char)26); //the stopping character Ctrl+Z
+  gsm.write(0x1A);
+  delay(5000); 
+        lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("MSG SENT");
+      delay(1000);    
+}
+
+
+void send_message(String message)
+{
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("MSG SENDING.....");
+  gsm.println("AT");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CMGF=1");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CNMI=2,2,0,0,0");    //To send SMS in Text Mode
+  delay(1000);
+  gsm.println("AT+CMGF=1");    //Set the GSM Module in Text Mode
+  delay(1000);  
+  gsm.println("AT+CMGS=\"9618528828\""); // Replace it with your mobile number
+  delay(1000);
+  gsm.println(message);   // The SMS text you want to send
+  delay(1000);
+  gsm.println((char)26); //the stopping character Ctrl+Z
+  gsm.write(0x1A);
+  delay(3000); 
+      lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("MSG SENT");
+      delay(1000);
+}
